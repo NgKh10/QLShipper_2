@@ -1,0 +1,299 @@
+1.Classes: encryption
+public static string MD5(string text)
+ {
+     MD5CryptoServiceProvider md5 = new MD5CryptoServiceProvider();
+     byte[] arr = Encoding.UTF8.GetBytes(text);
+     arr = md5.ComputeHash(arr);
+     StringBuilder sb = new StringBuilder();
+     foreach (byte b in arr)
+     {
+         sb.Append(b.ToString("x2").ToLower());
+     }
+     return sb.ToString();
+ }
+2. SQL: store proceduce 
+CREATE PROCEDURE sp_KiemTraDangNhap
+    @TenDangNhap NVARCHAR(30),
+    @MatKhau VARCHAR(40)
+AS
+BEGIN
+    SELECT TenDangNhap, QuyenTruyCap, TenHienThi
+    FROM Taikhoan
+    WHERE TenDangNhap = @TenDangNhap AND MatKhau = @MatKhau
+END
+
+3. DAL: TaikhoanDAL
+namespace QuanLyGiaoNhanDonHang.DAL
+{
+    public class TaiKhoanDAL
+    {
+        private string connectionString = @"Data Source=NGOCKHUE_10;Initial Catalog=QuanLyGiaoNhanDonHang;Integrated Security=True;Encrypt=False;";
+
+        // Hàm kiểm tra đăng nhập
+        public DataTable DangNhap(string username, string password)
+        {
+            DataTable dt = new DataTable();
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                using (SqlCommand cmd = new SqlCommand("sp_KiemTraDangNhap", conn))
+                {
+                  cmd.CommandType = CommandType.StoredProcedure;
+                  cmd.Parameters.AddWithValue("@TenDangNhap", username);
+                  cmd.Parameters.AddWithValue("@MatKhau", password);
+                  SqlDataAdapter adapter = new SqlDataAdapter(cmd);
+                  adapter.Fill(dt);
+                }
+            }
+
+            return dt;
+        }
+
+    }
+}
+
+4. 1 FORM ĐỔI MẬT KHẨU: ThayDoiMatKhau (txtTenDangNhap, txtMatKhauHienTai, txtMatKhauMoi, btnLuu, btnHuyBo, lblLoiMatKhauMoi, lblLoiMatKhauHienTai, lblNhapLai)
+
+5. SQL: Thay đổi mk	
+CREATE PROCEDURE SP_ThayDoiMatKhau
+    @TenDangNhap NVARCHAR(50),
+    @MatKhauCu NVARCHAR(50),
+    @MatKhauMoi NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Kiểm tra mật khẩu cũ
+    IF EXISTS (SELECT 1 FROM TaiKhoan 
+               WHERE TenDangNhap = @TenDangNhap 
+               AND MatKhau = @MatKhauCu)
+    BEGIN
+        -- Cập nhật mật khẩu mới (mã hóa MD5)
+        UPDATE TaiKhoan
+        SET MatKhau = @MatKhauMoi
+        WHERE TenDangNhap = @TenDangNhap;
+
+        SELECT 1; -- Thành công
+    END
+    ELSE
+    BEGIN
+        SELECT 0; -- Sai mật khẩu cũ
+    END
+END
+
+6. GUI: KhachHang "btnTaikhoan"
+    ThayDoiMatKhau td = new ThayDoiMatKhau();
+    td.ShowDialog();
+
+7. ThayDoiMatKhau.cs
+using QuanLyGiaoNhanDonHang.Classes;
+using QuanLyGiaoNhanDonHang.Entity;
+using System.Data;
+using System.Data.SqlClient;
+using System.Text.RegularExpressions;
+
+namespace QuanLyGiaoNhanDonHang.GUI
+{
+    public partial class ThayDoiMatKhau : DevExpress.XtraEditors.XtraForm
+    {
+        public ThayDoiMatKhau()
+        {
+            InitializeComponent();
+
+            //an loi khi mo form 
+            lblLoiMatKhauMoi.Visible = false;
+            lblLoiNhapLai.Visible = false;
+            lblLoiMatKhauHienTai.Visible = false;
+        }
+
+        private void btnLuu_Click(object sender, EventArgs e)
+        {
+            if (lblLoiMatKhauMoi.ForeColor == Color.Red || lblLoiNhapLai.ForeColor == Color.Red)
+                return;
+            string tenDangNhap = NguoiDungHienTai.TenDangNhap; // ten dang nhap hien tai 
+            string matkhauhientai = Encryption.MD5(txtMatKhauHienTai.Text.Trim()); // ma hoa mk cu
+            string matkhaumoi = Encryption.MD5(txtMatKhauMoi.Text.Trim()); // ma hoa mk moi 
+
+
+            SqlConnection conn = new SqlConnection("Data Source=NGOCKHUE_10;Initial Catalog=QuanLyGiaoNhanDonHang;Integrated Security=True");
+            SqlCommand cmd = new SqlCommand("SP_ThayDoiMatKhau", conn);
+            cmd.CommandType = CommandType.StoredProcedure;
+
+            // them thso cho stored proc
+            cmd.Parameters.AddWithValue("@TenDangNhap", tenDangNhap);
+            cmd.Parameters.AddWithValue("@MatKhauCu", matkhauhientai);
+            cmd.Parameters.AddWithValue("@MatKhauMoi", matkhaumoi);
+            try
+            {
+                conn.Open();
+                object obj = cmd.ExecuteScalar();
+                int result = obj != null ? Convert.ToInt32(obj) : 0;
+                string matKhauHienTai = txtMatKhauHienTai.Text.Trim();
+                if (string.IsNullOrEmpty(matKhauHienTai))
+                {
+                    lblLoiMatKhauHienTai.Text = "Vui lòng nhập mật khẩu!";
+                    lblLoiMatKhauHienTai.ForeColor = Color.Red;
+                    lblLoiMatKhauHienTai.Visible = true;
+                }
+                else if (result == 1)
+                {
+                    MessageBox.Show("Đổi mật khẩu thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    txtMatKhauHienTai.Clear();
+                    txtMatKhauMoi.Clear();
+                    txtNhapLai.Clear();
+                    this.Hide();
+                }
+                else
+                {
+                    lblLoiMatKhauHienTai.Text = "Mật khẩu hiện tại không đúng!";
+                    lblLoiMatKhauHienTai.ForeColor = Color.Red;
+                    lblLoiMatKhauHienTai.Visible = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                lblLoiMatKhauHienTai.Text = "Lỗi: " + ex.Message;
+                lblLoiMatKhauHienTai.ForeColor = Color.Red;
+                lblLoiMatKhauHienTai.Visible = true;
+            }
+            finally
+            {
+                conn.Close();
+            }
+        }
+        private string KiemTraMatKhau(string input)
+        {
+            input = input.Trim();
+
+            if (Regex.IsMatch(input, @"[^a-zA-Z0-9]"))
+                return "Mật Khẩu không được chứa ký tự đặc biệt!";
+            else if (input.Length < 6 || input.Length > 12)
+                return "Mật khẩu có độ dài từ 6 - 12 kí tự";
+            else if (!Regex.IsMatch(input, @"[a-zA-Z]"))
+                return "Mật khẩu phải chứa ít nhất 1 chữ cái";
+            else if (!Regex.IsMatch(input, @"\d"))
+                return "Mật khẩu phải chứa ít nhất 1 chữ số";
+            else if (string.IsNullOrEmpty(input))
+                return "Mật khẩu không được để trống!";
+            return null;
+        }
+
+        private void txtMatKhauMoi_TextChanged(object sender, EventArgs e)
+        {
+            // lblLoiMatKhauMoi.Text = KiemTraMatKhau(txtMatKhauMoi.Text.Trim());
+            //lblLoiMatKhauMoi.Visible = lblLoiMatKhauMoi.Text != null;
+            string loi = KiemTraMatKhau(txtMatKhauMoi.Text.Trim());
+
+            if (string.IsNullOrEmpty(loi))
+            {
+                lblLoiMatKhauMoi.Text = "Mật khẩu hợp lệ";// thong bao khi mk hop le 
+                lblLoiMatKhauMoi.ForeColor = Color.Green;
+                lblLoiMatKhauMoi.Visible = true;
+            }
+            else
+            {
+                lblLoiMatKhauMoi.Text = loi; // Hien thi loi 
+                lblLoiMatKhauMoi.ForeColor = Color.Red;
+                lblLoiMatKhauMoi.Visible = true;
+            }
+            // Kiểm tra lại mật khẩu nhập lại
+            txtNhapLai_TextChanged(sender, e);
+        }
+
+        private void txtMatKhauMoi_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter && !lblLoiMatKhauMoi.Visible)
+            {
+                btnLuu.PerformClick();
+            }
+        }
+
+        private void txtNhapLai_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter && !lblLoiMatKhauMoi.Visible)
+            {
+                btnLuu.PerformClick();
+            }
+        }
+        private void txtMatKhauMoi_Leave(object sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(txtMatKhauMoi.Text.Trim()))
+            {
+                lblLoiMatKhauMoi.Text = "Mật khẩu không được để trống!";
+                lblLoiMatKhauMoi.Visible = true;
+            }
+            else
+            {
+                lblLoiMatKhauMoi.Visible = false;
+            }
+        }
+
+        private void btnHuyBo_Click(object sender, EventArgs e)
+        {
+            this.Hide();
+        }
+
+        private void txtNhapLai_TextChanged(object sender, EventArgs e)
+        {
+            string matKhauMoi = txtMatKhauMoi.Text.Trim();
+            string nhapLai = txtNhapLai.Text.Trim();
+
+            if (!string.IsNullOrEmpty(nhapLai))
+            {
+                if (matKhauMoi != nhapLai)
+                {
+                    lblLoiNhapLai.Text = "Mật khẩu không khớp!";
+                    lblLoiNhapLai.ForeColor = Color.Red;
+                    lblLoiNhapLai.Visible = true;
+                    return;
+                }
+                else
+                {
+                    lblLoiNhapLai.Text = "Mật khẩu hợp lệ";
+                    lblLoiNhapLai.ForeColor = Color.Green;
+                    lblLoiNhapLai.Visible = true;
+                }
+            }
+            else
+            {
+                lblLoiNhapLai.Visible = false;
+            }
+        }
+
+        private void txtNhapLai_Enter(object sender, EventArgs e)
+        {
+            string matKhauMoi = txtMatKhauMoi.Text.Trim();
+            if (string.IsNullOrEmpty(matKhauMoi))
+            {
+                lblLoiNhapLai.Text = "Vui lòng nhập mật khẩu mới trước!";
+                lblLoiNhapLai.Visible = true;
+                return;
+            }
+            lblLoiNhapLai.Visible = false;
+        }
+
+        private void txtMatKhauMoi_Validating(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            string loi = KiemTraMatKhau(txtMatKhauMoi.Text.Trim());
+            if (!string.IsNullOrEmpty(loi))
+            {
+                lblLoiMatKhauMoi.Text = loi;
+                lblLoiMatKhauMoi.ForeColor = Color.Red;
+                lblLoiMatKhauMoi.Visible = true;
+                e.Cancel = true;
+            }
+            else
+            {
+                lblLoiMatKhauMoi.Text = "Mật khẩu hợp lệ";
+                lblLoiMatKhauMoi.ForeColor = Color.Green;
+                e.Cancel = false;
+            }
+        }
+
+        private void ThayDoiMatKhau_Load(object sender, EventArgs e)
+        {
+
+        }
+    }
+}
+8. tạo 1 frmHoaDon, và button XuatHoaDon ở DonHang (Thùy đã làm)
+9. tạo form frmKHTheoDoiTienTrinhDH 
