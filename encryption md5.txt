@@ -297,3 +297,90 @@ namespace QuanLyGiaoNhanDonHang.GUI
 }
 8. tạo 1 frmHoaDon, và button XuatHoaDon ở DonHang (Thùy đã làm)
 9. tạo form frmKHTheoDoiTienTrinhDH 
+10. 
+CREATE PROCEDURE [dbo].[SP_CapNhatMatKhau]
+    @TenDangNhap NVARCHAR(50),
+    @MatKhauMoi NVARCHAR(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE TaiKhoan
+    SET MatKhau = @MatKhauMoi
+    WHERE TenDangNhap = @TenDangNhap;
+END
+11. ThayDoiMatKhauThayDoiMatKhau
+private void btnLuu_Click(object sender, EventArgs e)
+{
+    if (lblLoiMatKhauMoi.ForeColor == Color.Red || lblLoiNhapLai.ForeColor == Color.Red)
+        return;
+
+    string tenDangNhap = NguoiDungHienTai.TenDangNhap;
+    string matKhauHienTai = txtMatKhauHienTai.Text.Trim();
+    string matKhauMoi = txtMatKhauMoi.Text.Trim();
+
+    if (string.IsNullOrEmpty(matKhauHienTai))
+    {
+        lblLoiMatKhauHienTai.Text = "Vui lòng nhập mật khẩu!";
+        lblLoiMatKhauHienTai.ForeColor = Color.Red;
+        lblLoiMatKhauHienTai.Visible = true;
+        return;
+    }
+
+    SqlConnection conn = new SqlConnection("Data Source=NGOCKHUE_10;Initial Catalog=QuanLyGiaoNhanDonHang;Integrated Security=True");
+
+    try
+    {
+        conn.Open();
+
+        // 1. Lấy hash mật khẩu trong DB
+        SqlCommand cmd = new SqlCommand("SELECT MatKhau FROM TaiKhoan WHERE TenDangNhap = @TenDangNhap", conn);
+        cmd.Parameters.AddWithValue("@TenDangNhap", tenDangNhap);
+        string hashedPassword = cmd.ExecuteScalar() as string;
+
+        if (hashedPassword == null || !Encryption.VerifyPassword(matKhauHienTai, hashedPassword))
+        {
+            lblLoiMatKhauHienTai.Text = "Mật khẩu hiện tại không đúng!";
+            lblLoiMatKhauHienTai.ForeColor = Color.Red;
+            lblLoiMatKhauHienTai.Visible = true;
+            return;
+        }
+
+        // 2. Hash mật khẩu mới bằng BCrypt
+        string newHashedPassword = Encryption.HashPassword(matKhauMoi);
+
+        // 3. Gọi SP để cập nhật mật khẩu mới
+        SqlCommand cmdUpdate = new SqlCommand("SP_CapNhatMatKhau", conn);
+        cmdUpdate.CommandType = CommandType.StoredProcedure;
+        cmdUpdate.Parameters.AddWithValue("@TenDangNhap", tenDangNhap);
+        cmdUpdate.Parameters.AddWithValue("@MatKhauMoi", newHashedPassword);
+
+        int rows = cmdUpdate.ExecuteNonQuery();
+
+        if (rows > 0)
+        {
+            MessageBox.Show("Đổi mật khẩu thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            txtMatKhauHienTai.Clear();
+            txtMatKhauMoi.Clear();
+            txtNhapLai.Clear();
+            this.Hide();
+        }
+        else
+        {
+            lblLoiMatKhauHienTai.Text = "Cập nhật thất bại!";
+            lblLoiMatKhauHienTai.ForeColor = Color.Red;
+            lblLoiMatKhauHienTai.Visible = true;
+        }
+    }
+    catch (Exception ex)
+    {
+        lblLoiMatKhauHienTai.Text = "Lỗi: " + ex.Message;
+        lblLoiMatKhauHienTai.ForeColor = Color.Red;
+        lblLoiMatKhauHienTai.Visible = true;
+    }
+    finally
+    {
+        conn.Close();
+    }
+}
+
