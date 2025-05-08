@@ -1,0 +1,65 @@
+1. NhanvienDAL
+public DataRow GetThongTinNhanVien(string MaNV)
+{
+
+    if (string.IsNullOrWhiteSpace(MaNV))
+    {
+        Console.WriteLine("Giá trị đang NULL hoặc RỖNG!");
+        return null;
+    }
+    using (SqlConnection conn = new SqlConnection(connectionString))
+    {
+        conn.Open();
+        SqlCommand cmd = new SqlCommand("GetNhanVienByMa", conn);
+        cmd.CommandType = CommandType.StoredProcedure;
+        cmd.Parameters.AddWithValue("@Manhanvien", MaNV);
+
+        SqlDataAdapter adapter = new SqlDataAdapter(cmd);
+        DataTable dt = new DataTable();
+        adapter.Fill(dt);
+
+        if (dt.Rows.Count > 0)
+            return dt.Rows[0];
+        else
+            return null;
+    }
+}2.nhanvienBLL
+ public DataRow Laythongtin(string ma)
+ {
+     return nhanVienDAL.GetThongTinNhanVien(ma);
+ }
+3. sql
+CREATE PROCEDURE [dbo].[GetNhanVienByMa]
+    @Manhanvien NVARCHAR(30)
+AS
+BEGIN
+    SELECT * 
+    FROM Nhan_Vien
+    WHERE Manhanvien = @Manhanvien
+END
+3. Nhanvien.cs
+pprivate string MaNhanVien;
+NhanvienBLL nvBLL = new NhanvienBLL();
+private void Nhanvien_Load(object sender, EventArgs e)
+{
+    ThongtincanhanNv.Appearance = TabAppearance.FlatButtons;
+    ThongtincanhanNv.ItemSize = new Size(0, 1);  // Thu nho header tab 
+    ThongtincanhanNv.SizeMode = TabSizeMode.Fixed;
+
+    DataRow row = nvBLL.Laythongtin(MaNhanVien);
+    if (row != null)
+    {
+        lbten.Text = row["Tennhanvien"].ToString();
+        lbsdt.Text = row["Sodienthoai"].ToString();
+        lbCCCD.Text = row["CCCDNV"].ToString();
+        lbns.Text = Convert.ToDateTime(row["Ngaysinh"]).ToString("dd/MM/yyyy");
+        lbptgh.Text = row["Phuongtiengiaohang"].ToString();
+        lbkvgh.Text = row["Khuvucgiaohang"].ToString();
+        lbngay.Text = row["Ngaybatdaulamviec"].ToString();
+       // lbngay.Text = Convert.ToDateTime(row["Ngaybatdaulamviec"]).ToString("dd/MM/yyyy");
+    }
+    else
+    {
+        MessageBox.Show("Không tìm thấy nhân viên!", "Lỗi", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+    }
+}
